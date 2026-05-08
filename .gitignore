@@ -1,0 +1,97 @@
+# macOS / Finder
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editor / IDE local state
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CMake / native build outputs
+build/
+build-*/
+cmake-build-*/
+out/
+DerivedData/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Xcode generated files
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+*.xcarchive/
+*.dSYM/
+
+# JUCE / plugin build artefacts
+*_artefacts/
+JuceLibraryCode/
+*.vst3/
+*.component/
+*.aaxplugin/
+*.appex/
+*.app/
+*.pkg
+*.dmg
+
+# Local Bifrost build folders
+bifrost/build/
+bifrost/build-*/
+bifrost/cmake-build-*/
+bifrost/out/
+
+# Distribution packages generated locally
+dist/
+bifrost/dist/
+release/
+bifrost/release/
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Logs / crash reports
+*.log
+*.trace
+*.crash
+*.ips
+
+# Test / coverage output
+coverage/
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# Python helper-script cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local audio/plugin scanner cache or temp files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Large generated model/checkpoint outputs.
+# Keep intentional source models in git by force-adding them if needed.
+*.onnx
+*.ckpt
+*.pt
+*.pth
+*.safetensors

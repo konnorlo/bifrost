@@ -1,0 +1,8 @@
+#pragma once
+
+namespace bifrost::build
+{
+inline constexpr const char* version = "@PROJECT_VERSION@";
+inline constexpr const char* gitSha = "@BIFROST_GIT_SHA@";
+inline constexpr const char* buildDateUtc = "@BIFROST_BUILD_DATE_UTC@";
+}

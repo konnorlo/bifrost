@@ -1,0 +1,66 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-26
+    env:
+      BUILD_TYPE: RelWithDebInfo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: version
+        run: python3 scripts/print_project_version.py >> "$GITHUB_OUTPUT"
+      - name: Validate dependency lock
+        run: python3 scripts/validate_dependency_lock.py
+      - name: Configure
+        run: cmake -S . -B build-xcode -G Xcode -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBIFROST_BUILD_TESTS=ON -DBIFROST_ENABLE_ONNX=OFF -DBIFROST_ENABLE_MINIAUDIO=OFF
+      - name: Build tests
+        run: cmake --build build-xcode --config ${{ env.BUILD_TYPE }} --target BifrostTests
+      - name: Run tests
+        run: ctest --test-dir build-xcode -C ${{ env.BUILD_TYPE }} --output-on-failure
+      - name: Build
+        run: cmake --build build-xcode --config ${{ env.BUILD_TYPE }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bifrost-${{ steps.version.outputs.version }}-macos-vst3-${{ github.sha }}
+          path: build-xcode/**/*.vst3
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    runs-on: windows-2022
+    env:
+      BUILD_TYPE: RelWithDebInfo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: version
+        run: python scripts/print_project_version.py | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Validate dependency lock
+        run: python scripts/validate_dependency_lock.py
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DBIFROST_BUILD_TESTS=ON -DBIFROST_ENABLE_ONNX=OFF -DBIFROST_ENABLE_MINIAUDIO=OFF
+      - name: Build tests
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target BifrostTests
+      - name: Run tests
+        run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bifrost-${{ steps.version.outputs.version }}-windows-vst3-${{ github.sha }}
+          path: build/**/*.vst3
+          if-no-files-found: error
+          retention-days: 14

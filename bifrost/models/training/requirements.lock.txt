@@ -1,0 +1,9 @@
+# Training-only environment. The plugin runtime must not depend on Python.
+# Resolve transitive dependencies with uv/pip-tools on the target machine before serious training.
+
+numpy==2.4.4
+scikit-learn==1.8.0
+librosa==0.11.0
+onnx==1.21.0
+onnxruntime==1.25.1
+torch==2.11.0

@@ -1,0 +1,12 @@
+flowchart TD
+    A[Drag audio file] --> B[Decode WAV/MP3/AIFF/FLAC]
+    B --> C[Resample + normalize]
+    C --> D[STFT multi-resolution]
+    D --> E[Pitch + loudness + transient analysis]
+    E --> F[Harmonic/noise/resonator extraction]
+    F --> G[Optional tiny ONNX timbre encoder]
+    G --> H[Timbre states + transitions]
+    H --> I[Compressed immutable TimbreModel]
+    I --> J[Realtime VoiceManager]
+    J --> K[Additive + Noise + Resonator synth]
+    K --> L[VST3 stereo output]

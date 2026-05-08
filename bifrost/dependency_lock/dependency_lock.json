@@ -1,0 +1,58 @@
+{
+  "project": "Bifrost",
+  "generated_date": "2026-05-06",
+  "runtime_cpp": {
+    "language_standard": "C++20",
+    "cmake_minimum": "3.27",
+    "cmake_recommended": "4.3.2",
+    "juce": {
+      "version": "8.0.12",
+      "git_repository": "https://github.com/juce-framework/JUCE.git",
+      "git_tag": "8.0.12",
+      "license_note": "Dual licensed; use commercial JUCE license for closed-source/commercial distribution unless AGPL obligations are acceptable."
+    },
+    "vst3": {
+      "source": "Via JUCE",
+      "note": "JUCE 8.0.11 changelog reports VST3 SDK updated to 3.8.0 MIT license. Do not vendor separate SDK unless necessary."
+    },
+    "miniaudio_optional": {
+      "version": "0.11.25",
+      "repository": "https://github.com/mackron/miniaudio",
+      "use": "Optional file decode fallback, especially MP3 path if chosen after legal review.",
+      "license_note": "Public domain / MIT-0 style project per miniaudio site. Verify before shipping."
+    },
+    "onnxruntime_optional": {
+      "version": "1.25.1",
+      "repository": "https://github.com/microsoft/onnxruntime",
+      "use": "Optional import-time tiny model inference only.",
+      "cmake_option": "BIFROST_ENABLE_ONNX"
+    }
+  },
+  "python_training": {
+    "python": "3.12.x",
+    "numpy": "2.4.4",
+    "scikit_learn": "1.8.0",
+    "librosa": "0.11.0",
+    "onnx": "1.21.0",
+    "onnxruntime": "1.25.1",
+    "torch": "2.11.0",
+    "lock_tool_recommendation": "uv or pip-tools; generate platform-specific lock before training"
+  },
+  "build_hosts": {
+    "macos_primary": {
+      "xcode": "26.x recommended/current, but install latest command-line tools for current macOS",
+      "notes": "Build on user's Mac first. Test both Xcode and Ninja if possible."
+    },
+    "windows_secondary": {
+      "visual_studio": "VS 2022 initially; validate VS 2026 later with JUCE 8.0.12",
+      "architecture": "x64"
+    }
+  },
+  "policy": [
+    "Do not add runtime dependencies without updating this file.",
+    "Keep ONNX optional.",
+    "Keep MP3 decoder backend swappable.",
+    "Do not put Python in the plugin runtime.",
+    "Pin all git dependencies by tag or commit."
+  ]
+}
