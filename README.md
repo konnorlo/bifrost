@@ -20,4 +20,4 @@ procedural JUCE UI with custom dark Bifrost styling
 macOS VST3 build support
 windows VST3 CI build support through GitHub Actions
 
-![screenshot](/Users/klosabre/bifrost/bifrost/assets/screenshot-ui.png)
+![screenshot](bifrost/assets/screenshot-ui.png)
