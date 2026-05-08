@@ -68,9 +68,20 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent \
+          package_dir="dist/Bifrost-${{ steps.version.outputs.version }}-macos-vst3"
+          zip_path="dist/Bifrost-${{ steps.version.outputs.version }}-macos-vst3.zip"
+          rm -rf "$package_dir" "$zip_path"
+          mkdir -p "$package_dir"
+          ditto \
             "build-xcode/Bifrost_artefacts/${{ env.BUILD_TYPE }}/VST3/Bifrost.vst3" \
-            "dist/Bifrost-${{ steps.version.outputs.version }}-macos-vst3.zip"
+            "$package_dir/Bifrost.vst3"
+          cat > "$package_dir/INSTALL.txt" <<'EOF'
+          Install Bifrost.vst3 to:
+          ~/Library/Audio/Plug-Ins/VST3/
+
+          Then rescan plugins in your DAW.
+          EOF
+          (cd "$package_dir" && ditto -c -k --sequesterRsrc . "../Bifrost-${{ steps.version.outputs.version }}-macos-vst3.zip")
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -106,6 +117,7 @@ jobs:
           -DBIFROST_BUILD_PLUGIN_SMOKE=OFF
           -DBIFROST_ENABLE_ONNX=OFF
           -DBIFROST_ENABLE_MINIAUDIO=OFF
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 
       - name: Build tests
         shell: pwsh
@@ -127,12 +139,24 @@ jobs:
           if ($null -eq $vst3) {
             throw "Bifrost.vst3 was not produced under build-windows"
           }
+          $packageDir = "dist/Bifrost-${{ steps.version.outputs.version }}-windows-vst3"
           $zip = "dist/Bifrost-${{ steps.version.outputs.version }}-windows-vst3.zip"
+          if (Test-Path $packageDir) {
+            Remove-Item $packageDir -Recurse -Force
+          }
           if (Test-Path $zip) {
             Remove-Item $zip -Force
           }
-          Compress-Archive -Path $vst3.FullName -DestinationPath $zip
-          Write-Host "Packaged $($vst3.FullName) -> $zip"
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+          Copy-Item -Path $vst3.FullName -Destination (Join-Path $packageDir "Bifrost.vst3") -Recurse
+          @"
+          Install Bifrost.vst3 to:
+          C:\Program Files\Common Files\VST3\
+
+          Then rescan plugins in your DAW.
+          "@ | Set-Content -Path (Join-Path $packageDir "INSTALL.txt")
+          Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zip
+          Write-Host "Packaged $packageDir -> $zip"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
