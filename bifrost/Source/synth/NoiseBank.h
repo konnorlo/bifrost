@@ -17,4 +17,5 @@ private:
     double fs = 44100.0;
     float last = 0.0f;
     std::vector<juce::dsp::StateVariableTPTFilter<float>> filters;
+    std::vector<float> lastCenterHz;
 };

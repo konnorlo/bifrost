@@ -29,4 +29,15 @@ private:
     std::vector<float> cosine;
     std::vector<float> rotatorSine;
     std::vector<float> rotatorCosine;
+    std::vector<float> harmonicWeights;
+    std::vector<float> phaseSine;
+    std::vector<float> phaseCosine;
+    float cachedBody = -1.0f;
+    float cachedBrightness = -1.0f;
+    int cachedWeightCount = -1;
+    float cachedPhaseOffsetCycles = -1.0f;
+    int cachedPhaseCount = -1;
+
+    void updateHarmonicWeightCache(const VoiceRenderParameters& params, int count);
+    void updatePhaseOffsetCache(float phaseOffsetCycles, int count);
 };

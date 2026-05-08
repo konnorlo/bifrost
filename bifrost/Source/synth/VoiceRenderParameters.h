@@ -13,6 +13,7 @@ struct VoiceRenderParameters
     float formantLock = 0.75f;
     float timeStretch = 1.0f;
     float outputGainDb = -6.0f;
+    float polyphonyGainDb = 0.0f;
     float attackSeconds = 0.01f;
     float decaySeconds = 0.16f;
     float sustainLevel = 0.75f;

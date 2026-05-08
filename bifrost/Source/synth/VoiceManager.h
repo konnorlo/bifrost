@@ -41,5 +41,11 @@ private:
 
     Voice& chooseVoice(int voiceLimit);
     void noteOff(int note, int voiceLimit);
+    int countActiveVoices(int voiceLimit) const noexcept;
+    void renderVoices(juce::AudioBuffer<float>& buffer,
+                      int startSample,
+                      int numSamples,
+                      int voiceLimit,
+                      const VoiceRenderParameters& params);
     void publishVoiceActivity(int index) noexcept;
 };

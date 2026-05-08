@@ -15,4 +15,6 @@ public:
 private:
     double fs = 44100.0;
     std::vector<juce::dsp::StateVariableTPTFilter<float>> filters;
+    std::vector<float> lastFrequencyHz;
+    std::vector<float> lastQ;
 };

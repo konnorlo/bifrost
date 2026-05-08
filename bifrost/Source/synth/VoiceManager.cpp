@@ -37,8 +37,7 @@ void VoiceManager::render(juce::AudioBuffer<float>& buffer,
     {
         const int eventSample = metadata.samplePosition;
         const int segment = std::clamp(eventSample - currentSample, 0, buffer.getNumSamples() - currentSample);
-        for (int i = 0; i < voiceLimit; ++i)
-            voices[static_cast<size_t>(i)].render(buffer, currentSample, segment, params);
+        renderVoices(buffer, currentSample, segment, voiceLimit, params);
         currentSample += segment;
 
         const auto msg = metadata.getMessage();
@@ -49,8 +48,7 @@ void VoiceManager::render(juce::AudioBuffer<float>& buffer,
     }
 
     const int remaining = buffer.getNumSamples() - currentSample;
-    for (int i = 0; i < voiceLimit; ++i)
-        voices[static_cast<size_t>(i)].render(buffer, currentSample, remaining, params);
+    renderVoices(buffer, currentSample, remaining, voiceLimit, params);
 
     for (int i = 0; i < maxVoices; ++i)
         publishVoiceActivity(i);
@@ -74,7 +72,23 @@ Voice& VoiceManager::chooseVoice(int voiceLimit)
 {
     for (int i = 0; i < voiceLimit; ++i)
         if (!voices[static_cast<size_t>(i)].isActive()) return voices[static_cast<size_t>(i)];
-    return voices.front();
+
+    int bestIndex = 0;
+    float bestScore = std::numeric_limits<float>::max();
+    for (int i = 0; i < voiceLimit; ++i)
+    {
+        const auto& voice = voices[static_cast<size_t>(i)];
+        const float releaseBonus = voice.isReleasing() ? -2.0f : 0.0f;
+        const float ageBonus = std::min(voice.getAgeSeconds(), 8.0f) * -0.015f;
+        const float score = voice.getLastPeak() + releaseBonus + ageBonus;
+        if (score < bestScore)
+        {
+            bestScore = score;
+            bestIndex = i;
+        }
+    }
+
+    return voices[static_cast<size_t>(bestIndex)];
 }
 
 void VoiceManager::noteOff(int note, int voiceLimit)
@@ -85,6 +99,33 @@ void VoiceManager::noteOff(int note, int voiceLimit)
         if (voice.isActive() && voice.getMidiNote() == note)
             voice.stop();
     }
+}
+
+int VoiceManager::countActiveVoices(int voiceLimit) const noexcept
+{
+    int activeCount = 0;
+    for (int i = 0; i < voiceLimit; ++i)
+        if (voices[static_cast<size_t>(i)].isActive())
+            ++activeCount;
+
+    return activeCount;
+}
+
+void VoiceManager::renderVoices(juce::AudioBuffer<float>& buffer,
+                                int startSample,
+                                int numSamples,
+                                int voiceLimit,
+                                const VoiceRenderParameters& params)
+{
+    if (numSamples <= 0)
+        return;
+
+    auto segmentParams = params;
+    const float activeCount = static_cast<float>(std::max(1, countActiveVoices(voiceLimit)));
+    segmentParams.polyphonyGainDb = -7.5f * std::log10(activeCount);
+
+    for (int i = 0; i < voiceLimit; ++i)
+        voices[static_cast<size_t>(i)].render(buffer, startSample, numSamples, segmentParams);
 }
 
 void VoiceManager::publishVoiceActivity(int index) noexcept

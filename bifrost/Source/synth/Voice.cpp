@@ -62,7 +62,7 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
     updateBaseFrequencies(params);
 
     const float velocityGain = juce::jmap(std::clamp(params.velocitySensitivity, 0.0f, 1.0f), 1.0f, std::clamp(velocity, 0.0f, 1.0f));
-    const float gain = juce::Decibels::decibelsToGain(params.outputGainDb) * velocityGain * 1.35f;
+    const float gain = juce::Decibels::decibelsToGain(params.outputGainDb + params.polyphonyGainDb) * velocityGain * 1.35f;
     const float dt = 1.0f / static_cast<float>(fs);
     const float modelDuration = std::max(0.001f, model->durationSeconds);
     const float effectiveTimeStretch = getEffectiveTimeStretch(params);
@@ -72,6 +72,20 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
 
     if (params.mode == 1)
         updateStaticSustainCache(params);
+
+    std::array<LayerRuntime, 4> layerRuntime;
+    for (int layer = 0; layer < layerCount; ++layer)
+    {
+        auto& runtime = layerRuntime[static_cast<size_t>(layer)];
+        runtime.params = getLayerParameters(layer, layerCount, params);
+        runtime.phaseOffset = getLayerPhaseOffset(layer, layerCount, runtime.params);
+        runtime.movingColour = params.mode == 1 ? std::clamp(runtime.params.motion, 0.0f, 1.0f) : 1.0f;
+
+        const float clampedPan = getLayerPan(layer, layerCount, runtime.params);
+        const float panAngle = (clampedPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
+        runtime.leftGain = std::cos(panAngle);
+        runtime.rightGain = std::sin(panAngle);
+    }
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -86,33 +100,31 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
         float mono = 0.0f;
         for (int layer = 0; layer < layerCount; ++layer)
         {
-            auto layerParams = getLayerParameters(layer, layerCount, params);
-            const float layerTime = getLayerModelTime(stretchedAge, modelDuration, layerParams, layer, layerCount);
-            const float phaseOffset = getLayerPhaseOffset(layer, layerCount, layerParams);
+            const auto& runtime = layerRuntime[static_cast<size_t>(layer)];
+            const auto& layerParams = runtime.params;
+            const float layerTime = params.mode == 1
+                ? cachedModelTimeSeconds
+                : getLayerModelTime(stretchedAge, modelDuration, layerParams, layer, layerCount);
             float y = params.mode == 1
                 ? additiveLayers[static_cast<size_t>(layer)].renderStaticSample(cachedHarmonicAmplitudes,
                                                                                 cachedLoudness,
                                                                                 layerParams,
-                                                                                phaseOffset)
+                                                                                runtime.phaseOffset)
                 : additiveLayers[static_cast<size_t>(layer)].renderSample(*model,
                                                                           layerTime,
                                                                           layerParams,
-                                                                          phaseOffset,
+                                                                          runtime.phaseOffset,
                                                                           -1.0f,
                                                                           0.0f);
 
             const float colourTime = params.mode == 1 ? cachedModelTimeSeconds : layerTime;
-            const float movingColour = params.mode == 1 ? std::clamp(layerParams.motion, 0.0f, 1.0f) : 1.0f;
-            y += movingColour * noise.renderSample(*model, colourTime, layerParams);
-            y += movingColour * resonators.process(y, *model, colourTime, layerParams);
+            y += runtime.movingColour * noise.renderSample(*model, colourTime, layerParams);
+            y += runtime.movingColour * resonators.process(y, *model, colourTime, layerParams);
 
             y *= layerGain;
             mono += y;
-
-            const float clampedPan = getLayerPan(layer, layerCount, layerParams);
-            const float panAngle = (clampedPan + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
-            left += y * std::cos(panAngle);
-            right += y * std::sin(panAngle);
+            left += y * runtime.leftGain;
+            right += y * runtime.rightGain;
         }
 
         const float reconstruction = std::clamp(params.stereoReconstruction, 0.0f, 1.0f);
@@ -265,8 +277,8 @@ void Voice::updateBaseFrequencies(const VoiceRenderParameters& params)
     {
         const float spread = layerCount <= 1 ? 0.0f : (static_cast<float>(layer) / static_cast<float>(layerCount - 1)) * 2.0f - 1.0f;
         const float branch = randomUnitFromLayer(randomUnit, layer, 11);
-        const float mutationDetune = branch * std::clamp(params.mutation, 0.0f, 1.0f) * 3.5f;
-        const float stereoDetune = spread * std::clamp(params.stereoReconstruction, 0.0f, 1.0f) * 1.5f;
+    const float mutationDetune = branch * std::clamp(params.mutation, 0.0f, 1.0f) * 12.0f;
+    const float stereoDetune = spread * std::clamp(params.stereoReconstruction, 0.0f, 1.0f) * 3.0f;
         const float cents = spread * detuneCents + mutationDetune + stereoDetune;
         const float targetHz = midiHz * std::pow(2.0f, cents / 1200.0f);
         if (std::abs(targetHz - lastBaseFrequencyHz[layer]) > 0.001f)
@@ -390,10 +402,10 @@ VoiceRenderParameters Voice::getLayerParameters(int layer, int layerCount, const
     const float mutation = std::clamp(params.mutation, 0.0f, 1.0f);
     const float stereo = std::clamp(params.stereoReconstruction, 0.0f, 1.0f);
 
-    layerParams.body = std::clamp(params.body * (1.0f - 0.045f * std::abs(branch) * mutation), 0.0f, 1.5f);
-    layerParams.air = std::clamp(params.air + (0.055f * branch * mutation) + (0.035f * std::abs(spread) * stereo), 0.0f, 1.5f);
-    layerParams.metal = std::clamp(params.metal + 0.050f * spread * stereo + 0.040f * branch * mutation, 0.0f, 1.5f);
-    layerParams.brightness = std::clamp(params.brightness + 0.060f * spread * stereo + 0.055f * branch * mutation, 0.0f, 1.5f);
+    layerParams.body = std::clamp(params.body * (1.0f - 0.35f * std::abs(branch) * mutation), 0.0f, 2.0f);
+    layerParams.air = std::clamp(params.air + (0.45f * branch * mutation) + (0.20f * std::abs(spread) * stereo), 0.0f, 2.0f);
+    layerParams.metal = std::clamp(params.metal + 0.35f * spread * stereo + 0.35f * branch * mutation, 0.0f, 2.0f);
+    layerParams.brightness = std::clamp(params.brightness + 0.40f * spread * stereo + 0.40f * branch * mutation, 0.0f, 2.0f);
     return layerParams;
 }
 

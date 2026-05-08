@@ -15,12 +15,23 @@ public:
     void start(int midiNote, float velocity, std::shared_ptr<const TimbreModel> model, uint32_t noteSerial);
     void stop();
     bool isActive() const noexcept { return active; }
+    bool isReleasing() const noexcept { return releasing; }
     int getMidiNote() const noexcept { return note; }
+    float getAgeSeconds() const noexcept { return ageSeconds; }
     float getModelTimeNormalized() const noexcept;
     float getLastPeak() const noexcept { return lastPeak; }
     void render(juce::AudioBuffer<float>& buffer, int startSample, int numSamples, const VoiceRenderParameters& params);
 
 private:
+    struct LayerRuntime
+    {
+        VoiceRenderParameters params;
+        float phaseOffset = 0.0f;
+        float leftGain = 1.0f;
+        float rightGain = 1.0f;
+        float movingColour = 1.0f;
+    };
+
     bool active = false;
     bool releasing = false;
     int note = -1;
