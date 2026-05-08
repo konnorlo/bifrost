@@ -4,6 +4,11 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $buildDir = Join-Path $repoRoot "build-windows"
 $distDir = Join-Path $repoRoot "dist"
 $config = "RelWithDebInfo"
+$versionLine = python (Join-Path $repoRoot "scripts/print_project_version.py")
+$version = ($versionLine -replace "^version=", "").Trim()
+if ([string]::IsNullOrWhiteSpace($version)) {
+    throw "Could not read project version"
+}
 
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
@@ -23,7 +28,7 @@ if ($null -eq $vst3) {
     throw "Bifrost.vst3 was not produced under $buildDir"
 }
 
-$zipPath = Join-Path $distDir "Bifrost-windows-vst3.zip"
+$zipPath = Join-Path $distDir "Bifrost-$version-windows-vst3.zip"
 if (Test-Path $zipPath) {
     Remove-Item $zipPath -Force
 }

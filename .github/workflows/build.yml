@@ -1,0 +1,163 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: bifrost
+
+jobs:
+  macos-vst3:
+    name: macOS VST3
+    runs-on: macos-14
+    env:
+      BUILD_TYPE: RelWithDebInfo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: python3 scripts/print_project_version.py >> "$GITHUB_OUTPUT"
+
+      - name: Validate dependency lock
+        shell: bash
+        run: python3 scripts/validate_dependency_lock.py
+
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build-xcode -G Xcode
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          -DBIFROST_BUILD_TESTS=ON
+          -DBIFROST_BUILD_STANDALONE=OFF
+          -DBIFROST_BUILD_PLUGIN_SMOKE=ON
+          -DBIFROST_ENABLE_ONNX=OFF
+          -DBIFROST_ENABLE_MINIAUDIO=OFF
+
+      - name: Build tests
+        shell: bash
+        run: cmake --build build-xcode --config ${{ env.BUILD_TYPE }} --target BifrostTests
+
+      - name: Run tests
+        shell: bash
+        run: ctest --test-dir build-xcode -C ${{ env.BUILD_TYPE }} --output-on-failure
+
+      - name: Build VST3
+        shell: bash
+        run: cmake --build build-xcode --config ${{ env.BUILD_TYPE }} --target Bifrost_VST3
+
+      - name: Smoke load VST3
+        shell: bash
+        run: |
+          cmake --build build-xcode --config ${{ env.BUILD_TYPE }} --target BifrostPluginSmoke
+          build-xcode/BifrostPluginSmoke_artefacts/${{ env.BUILD_TYPE }}/BifrostPluginSmoke \
+            build-xcode/Bifrost_artefacts/${{ env.BUILD_TYPE }}/VST3/Bifrost.vst3
+
+      - name: Package macOS VST3
+        shell: bash
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            "build-xcode/Bifrost_artefacts/${{ env.BUILD_TYPE }}/VST3/Bifrost.vst3" \
+            "dist/Bifrost-${{ steps.version.outputs.version }}-macos-vst3.zip"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bifrost-${{ steps.version.outputs.version }}-macos-vst3
+          path: bifrost/dist/Bifrost-${{ steps.version.outputs.version }}-macos-vst3.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-vst3:
+    name: Windows VST3
+    runs-on: windows-2022
+    env:
+      BUILD_TYPE: RelWithDebInfo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: python scripts/print_project_version.py | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Validate dependency lock
+        shell: pwsh
+        run: python scripts/validate_dependency_lock.py
+
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S . -B build-windows -G "Visual Studio 17 2022" -A x64
+          -DBIFROST_BUILD_TESTS=ON
+          -DBIFROST_BUILD_STANDALONE=OFF
+          -DBIFROST_BUILD_PLUGIN_SMOKE=OFF
+          -DBIFROST_ENABLE_ONNX=OFF
+          -DBIFROST_ENABLE_MINIAUDIO=OFF
+
+      - name: Build tests
+        shell: pwsh
+        run: cmake --build build-windows --config $env:BUILD_TYPE --target BifrostTests
+
+      - name: Run tests
+        shell: pwsh
+        run: ctest --test-dir build-windows -C $env:BUILD_TYPE --output-on-failure
+
+      - name: Build VST3
+        shell: pwsh
+        run: cmake --build build-windows --config $env:BUILD_TYPE --target Bifrost_VST3
+
+      - name: Package Windows VST3
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $vst3 = Get-ChildItem -Path build-windows -Recurse -Directory -Filter "Bifrost.vst3" | Select-Object -First 1
+          if ($null -eq $vst3) {
+            throw "Bifrost.vst3 was not produced under build-windows"
+          }
+          $zip = "dist/Bifrost-${{ steps.version.outputs.version }}-windows-vst3.zip"
+          if (Test-Path $zip) {
+            Remove-Item $zip -Force
+          }
+          Compress-Archive -Path $vst3.FullName -DestinationPath $zip
+          Write-Host "Packaged $($vst3.FullName) -> $zip"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bifrost-${{ steps.version.outputs.version }}-windows-vst3
+          path: bifrost/dist/Bifrost-${{ steps.version.outputs.version }}-windows-vst3.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [ macos-vst3, windows-vst3 ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
