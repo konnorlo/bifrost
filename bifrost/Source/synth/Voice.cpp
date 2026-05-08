@@ -70,13 +70,16 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
     const float layerGain = 1.0f / std::sqrt(static_cast<float>(layerCount));
     float blockPeak = 0.0f;
 
+    if (params.mode == 1)
+        updateStaticSustainCache(params);
+
     for (int i = 0; i < numSamples; ++i)
     {
         const float stretchedAge = ageSeconds / effectiveTimeStretch;
         if (params.mode == 0 && !releasing && stretchedAge >= modelDuration)
             beginRelease();
 
-        currentModelTimeSeconds = getModelTime(stretchedAge, modelDuration, params);
+        currentModelTimeSeconds = params.mode == 1 ? cachedModelTimeSeconds : getModelTime(stretchedAge, modelDuration, params);
 
         float left = 0.0f;
         float right = 0.0f;
@@ -85,21 +88,23 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
         {
             auto layerParams = getLayerParameters(layer, layerCount, params);
             const float layerTime = getLayerModelTime(stretchedAge, modelDuration, layerParams, layer, layerCount);
-            const float alternateMix = params.mode == 1 ? std::clamp(0.18f + 0.32f * layerParams.motion, 0.0f, 0.55f) : 0.0f;
-            const float alternateOffset = (0.018f + 0.070f * layerParams.motion) * (modelDuration / std::max(0.001f, modelDuration));
-            const float alternateTime = params.mode == 1
-                ? getLoopScanTime(stretchedAge, modelDuration, layerParams, layer, layerCount, alternateOffset)
-                : -1.0f;
-            float y = additiveLayers[static_cast<size_t>(layer)].renderSample(*model,
-                                                                               layerTime,
-                                                                               layerParams,
-                                                                               getLayerPhaseOffset(layer, layerCount, layerParams),
-                                                                               alternateTime,
-                                                                               alternateMix);
+            const float phaseOffset = getLayerPhaseOffset(layer, layerCount, layerParams);
+            float y = params.mode == 1
+                ? additiveLayers[static_cast<size_t>(layer)].renderStaticSample(cachedHarmonicAmplitudes,
+                                                                                cachedLoudness,
+                                                                                layerParams,
+                                                                                phaseOffset)
+                : additiveLayers[static_cast<size_t>(layer)].renderSample(*model,
+                                                                          layerTime,
+                                                                          layerParams,
+                                                                          phaseOffset,
+                                                                          -1.0f,
+                                                                          0.0f);
 
-            const float movingColour = params.mode == 1 ? std::clamp(0.35f + 0.65f * layerParams.motion, 0.0f, 1.0f) : 1.0f;
-            y += movingColour * noise.renderSample(*model, layerTime, layerParams);
-            y += movingColour * resonators.process(y, *model, layerTime, layerParams);
+            const float colourTime = params.mode == 1 ? cachedModelTimeSeconds : layerTime;
+            const float movingColour = params.mode == 1 ? std::clamp(layerParams.motion, 0.0f, 1.0f) : 1.0f;
+            y += movingColour * noise.renderSample(*model, colourTime, layerParams);
+            y += movingColour * resonators.process(y, *model, colourTime, layerParams);
 
             y *= layerGain;
             mono += y;
@@ -297,7 +302,8 @@ float Voice::getSustainModelTime(float durationSeconds, const VoiceRenderParamet
     const float loopStart = std::clamp(params.loopStartNormalized, 0.0f, 0.98f);
     const float loopEnd = std::clamp(params.loopEndNormalized, loopStart + 0.01f, 1.0f);
     const float randomAmount = std::clamp(params.startRandomAmount, 0.0f, 1.0f);
-    const float position = loopStart + (loopEnd - loopStart) * randomStartNormalized * randomAmount;
+    const float randomizedPosition = 0.5f + (randomStartNormalized - 0.5f) * randomAmount;
+    const float position = loopStart + (loopEnd - loopStart) * randomizedPosition;
     return std::clamp(position * durationSeconds, 0.0f, durationSeconds);
 }
 
@@ -316,7 +322,10 @@ float Voice::getLayerModelTime(float stretchedAgeSeconds, float durationSeconds,
         return std::clamp(baseTime + offsetNorm * durationSeconds, 0.0f, durationSeconds);
     }
 
-    return getLoopScanTime(stretchedAgeSeconds, durationSeconds, params, layer, layerCount, 0.0f);
+    juce::ignoreUnused(stretchedAgeSeconds);
+    juce::ignoreUnused(layer);
+    juce::ignoreUnused(layerCount);
+    return getSustainModelTime(durationSeconds, params);
 }
 
 float Voice::getLoopScanTime(float stretchedAgeSeconds,
@@ -409,7 +418,7 @@ float Voice::getModelTime(float stretchedAgeSeconds, float durationSeconds, cons
     const float sustainEnd = std::max(sustainStart + 0.001f, loopEndNorm * durationSeconds);
 
     if (params.mode == 1)
-        return getLoopScanTime(stretchedAgeSeconds, durationSeconds, params, 0, 1, 0.0f);
+        return getSustainModelTime(durationSeconds, params);
 
     if (stretchedAgeSeconds <= sustainStart)
         return std::clamp(stretchedAgeSeconds, 0.0f, durationSeconds);
