@@ -123,6 +123,13 @@ void VoiceManager::renderVoices(juce::AudioBuffer<float>& buffer,
     auto segmentParams = params;
     const float activeCount = static_cast<float>(std::max(1, countActiveVoices(voiceLimit)));
     segmentParams.polyphonyGainDb = -7.5f * std::log10(activeCount);
+    if (activeCount >= 6.0f)
+    {
+        const float density = std::clamp((activeCount - 5.0f) / 7.0f, 0.0f, 1.0f);
+        segmentParams.maxHarmonics = std::max(16, static_cast<int>(std::round(static_cast<float>(segmentParams.maxHarmonics) * (1.0f - 0.35f * density))));
+        segmentParams.maxNoiseBands = std::max(4, static_cast<int>(std::round(static_cast<float>(segmentParams.maxNoiseBands) * (1.0f - 0.45f * density))));
+        segmentParams.maxResonators = std::max(4, static_cast<int>(std::round(static_cast<float>(segmentParams.maxResonators) * (1.0f - 0.45f * density))));
+    }
 
     for (int i = 0; i < voiceLimit; ++i)
         voices[static_cast<size_t>(i)].render(buffer, startSample, numSamples, segmentParams);

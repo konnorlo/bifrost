@@ -7,6 +7,7 @@
 #include "synth/AdditiveOscBank.h"
 #include "synth/NoiseBank.h"
 #include "synth/ResonatorBank.h"
+#include "synth/InertiaSmoother.h"
 
 class Voice
 {
@@ -54,6 +55,7 @@ private:
     std::vector<float> cachedHarmonicAmplitudes;
     std::shared_ptr<const TimbreModel> model;
     std::array<AdditiveOscBank, 4> additiveLayers;
+    std::array<InertiaSmoother, 4> modelTimeSmoothers;
     NoiseBank noise;
     ResonatorBank resonators;
 

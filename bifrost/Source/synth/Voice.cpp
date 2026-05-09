@@ -34,6 +34,9 @@ void Voice::start(int midiNote, float vel, std::shared_ptr<const TimbreModel> m,
     active = static_cast<bool>(model) && model->isUsable();
     for (auto& layer : additiveLayers)
         layer.reset();
+    const float initialModelTime = getSustainModelTime(std::max(0.001f, model ? model->durationSeconds : 0.001f), VoiceRenderParameters {});
+    for (auto& smoother : modelTimeSmoothers)
+        smoother.reset(initialModelTime);
     noise.reset();
     resonators.reset();
 }
@@ -70,7 +73,8 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
     const float layerGain = 1.0f / std::sqrt(static_cast<float>(layerCount));
     float blockPeak = 0.0f;
 
-    if (params.mode == 1)
+    const bool useStaticSustain = params.mode == 1 && params.motion < 0.85f;
+    if (useStaticSustain)
         updateStaticSustainCache(params);
 
     std::array<LayerRuntime, 4> layerRuntime;
@@ -102,10 +106,19 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
         {
             const auto& runtime = layerRuntime[static_cast<size_t>(layer)];
             const auto& layerParams = runtime.params;
-            const float layerTime = params.mode == 1
+            float layerTime = useStaticSustain
                 ? cachedModelTimeSeconds
-                : getLayerModelTime(stretchedAge, modelDuration, layerParams, layer, layerCount);
-            float y = params.mode == 1
+                : (params.mode == 1
+                    ? getLoopScanTime(stretchedAge, modelDuration, layerParams, layer, layerCount, runtime.phaseOffset)
+                    : getLayerModelTime(stretchedAge, modelDuration, layerParams, layer, layerCount));
+            if (params.mode == 1 && !useStaticSustain)
+            {
+                const float inertia = juce::jmap(std::clamp(layerParams.inertia, 0.0f, 1.0f), 0.05f, 0.975f);
+                layerTime = std::clamp(modelTimeSmoothers[static_cast<size_t>(layer)].process(layerTime, inertia),
+                                       0.0f,
+                                       modelDuration);
+            }
+            float y = useStaticSustain
                 ? additiveLayers[static_cast<size_t>(layer)].renderStaticSample(cachedHarmonicAmplitudes,
                                                                                 cachedLoudness,
                                                                                 layerParams,
@@ -117,7 +130,7 @@ void Voice::render(juce::AudioBuffer<float>& buffer, int startSample, int numSam
                                                                           -1.0f,
                                                                           0.0f);
 
-            const float colourTime = params.mode == 1 ? cachedModelTimeSeconds : layerTime;
+            const float colourTime = layerTime;
             y += runtime.movingColour * noise.renderSample(*model, colourTime, layerParams);
             y += runtime.movingColour * resonators.process(y, *model, colourTime, layerParams);
 

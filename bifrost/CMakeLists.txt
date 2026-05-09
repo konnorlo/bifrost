@@ -180,6 +180,7 @@ if(BIFROST_BUILD_TESTS)
         Source/synth/AdditiveOscBank.cpp
         Source/synth/NoiseBank.cpp
         Source/synth/ResonatorBank.cpp
+        Source/synth/InertiaSmoother.cpp
     )
 
     target_include_directories(BifrostTests PRIVATE

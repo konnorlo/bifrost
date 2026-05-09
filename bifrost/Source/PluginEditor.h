@@ -30,6 +30,7 @@ private:
     juce::Image backgroundImage;
 
     juce::Label title;
+    juce::Label subtitle;
     juce::Label rootOverrideLabel;
     juce::Label modeLabel;
     juce::Label qualityLabel;
